@@ -338,7 +338,8 @@ static bool has_stopped_jobs(struct pid *pgrp)
 	return false;
 }
 
-#ifdef CONFIG_PRODUCT_REALME_SDM710
+#ifdef VENDOR_EDIT
+//Shu.Liu@PSW.AD.Stability.Crash.1052210, 2014/01/20, Add for not kill zygote
 static bool oppo_is_android_core_group(struct pid *pgrp)
 {
     struct task_struct *p;
@@ -352,7 +353,7 @@ static bool oppo_is_android_core_group(struct pid *pgrp)
 
     return false;
 }
-#endif /* CONFIG_PRODUCT_REALME_SDM710 */
+#endif /* VENDOR_EDIT */
 
 /*
  * Check to see if any process groups have become orphaned as
@@ -380,12 +381,13 @@ kill_orphaned_pgrp(struct task_struct *tsk, struct task_struct *parent)
 	    task_session(parent) == task_session(tsk) &&
 	    will_become_orphaned_pgrp(pgrp, ignored_task) &&
 	    has_stopped_jobs(pgrp)) {
-#ifdef CONFIG_PRODUCT_REALME_SDM710
+#ifdef VENDOR_EDIT
+//Shu.Liu@PSW.AD.Stability.Crash.1052210, 2014/01/10, Add for clean backstage
             if (oppo_is_android_core_group(pgrp)) {
                 printk("kill_orphaned_pgrp: find android core process will be hungup, ignored it, only hungup itself:%s:%d , current=%d \n",tsk->comm,tsk->pid,current->pid);
                 return;
             }
-#endif /* CONFIG_PRODUCT_REALME_SDM710 */
+#endif /* VENDOR_EDIT */
 		__kill_pgrp_info(SIGHUP, SEND_SIG_PRIV, pgrp);
 		__kill_pgrp_info(SIGCONT, SEND_SIG_PRIV, pgrp);
 	}
@@ -489,7 +491,7 @@ static void exit_mm(struct task_struct *tsk)
 	struct core_state *core_state;
 	int mm_released;
 
-	mm_release(tsk, mm);
+	exit_mm_release(tsk, mm);
 	if (!mm)
 		return;
 	sync_mm_rss(mm);
@@ -770,7 +772,8 @@ static void check_stack_usage(void)
 static inline void check_stack_usage(void) {}
 #endif
 
-//#ifdef CONFIG_PRODUCT_REALME_SDM710
+//#ifdef VENDOR_EDIT
+//Haoran.Zhang@PSW.AD.Stability.Crash.1052210, 2016/05/24, Add for debug critical svc crash
 static bool is_zygote_process(struct task_struct *t)
 {
 	const struct cred *tcred = __task_cred(t);
@@ -801,22 +804,24 @@ static bool is_critial_process(struct task_struct *t) {
     }
 
 }
-//#endif /*CONFIG_PRODUCT_REALME_SDM710*/
+//#endif /*VENDOR_EDIT*/
 
 void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
 	int group_dead;
-#if defined(CONFIG_PRODUCT_REALME_SDM710) && defined(CONFIG_ELSA_STUB)
+#if defined(VENDOR_EDIT) && defined(CONFIG_ELSA_STUB)
+//zhoumingjun@Swdp.shanghai, 2017/04/19, add process_event_notifier support
 	struct process_event_data pe_data;
 #endif
 	TASKS_RCU(int tasks_rcu_i);
 
-//#ifdef CONFIG_PRODUCT_REALME_SDM710
+//#ifdef VENDOR_EDIT
+//Haoran.Zhang@PSW.AD.Stability.Crash.1052210, 2016/05/24, Add for debug critical svc crash
     if (is_critial_process(tsk)) {
         printk("critical svc %d:%s exit with %ld !\n", tsk->pid, tsk->comm,code);
     }
-//#endif /*CONFIG_PRODUCT_REALME_SDM710*/
+//#endif /*VENDOR_EDIT*/
 
 	/*
 	 * We can get here from a kernel oops, sometimes with preemption off.
@@ -855,7 +860,8 @@ void __noreturn do_exit(long code)
 
 	validate_creds_for_do_exit(tsk);
 
-#if defined(CONFIG_PRODUCT_REALME_SDM710) && defined(CONFIG_ELSA_STUB)
+#if defined(VENDOR_EDIT) && defined(CONFIG_ELSA_STUB)
+//zhoumingjun@Swdp.shanghai, 2017/04/19, add process_event_notifier support
 	pe_data.pid = tsk->pid;
 	pe_data.uid = tsk->real_cred->uid;
 	pe_data.reason = code;
@@ -872,16 +878,7 @@ void __noreturn do_exit(long code)
 #else
 		pr_alert("Fixing recursive fault but reboot is needed!\n");
 #endif
-		/*
-		 * We can do this unlocked here. The futex code uses
-		 * this flag just to verify whether the pi state
-		 * cleanup has been done or not. In the worst case it
-		 * loops once more. We pretend that the cleanup was
-		 * done as there is no way to return. Either the
-		 * OWNER_DIED bit is set by now or we push the blocked
-		 * task into the wait for ever nirwana as well.
-		 */
-		tsk->flags |= PF_EXITPIDONE;
+		futex_exit_recursive(tsk);
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule();
 	}
@@ -891,16 +888,6 @@ void __noreturn do_exit(long code)
 	sched_exit(tsk);
 	schedtune_exit_task(tsk);
 
-	/*
-	 * Ensure that all new tsk->pi_lock acquisitions must observe
-	 * PF_EXITING. Serializes against futex.c:attach_to_pi_owner().
-	 */
-	smp_mb();
-	/*
-	 * Ensure that we must observe the pi_state in exit_mm() ->
-	 * mm_release() -> exit_pi_state_list().
-	 */
-	raw_spin_unlock_wait(&tsk->pi_lock);
 
 	/* sync mm's RSS info before statistics gathering */
 	if (tsk->mm)
@@ -967,12 +954,6 @@ void __noreturn do_exit(long code)
 	 * Make sure we are holding no locks:
 	 */
 	debug_check_no_locks_held();
-	/*
-	 * We can do this unlocked here. The futex code uses this flag
-	 * just to verify whether the pi state cleanup has been done
-	 * or not. In the worst case it loops once more.
-	 */
-	tsk->flags |= PF_EXITPIDONE;
 
 	if (tsk->io_context)
 		exit_io_context(tsk);
