@@ -1,6 +1,6 @@
 VERSION = 4
 PATCHLEVEL = 9
-SUBLEVEL = 261
+SUBLEVEL = 268
 EXTRAVERSION =
 NAME = Roaring Lionus
 
@@ -686,6 +686,16 @@ LDFLAGS		+= -plugin LLVMgold.so
 LLVM_AR		:= llvm-ar
 LLVM_DIS	:= llvm-dis
 export LLVM_AR LLVM_DIS
+endif
+
+ifdef CONFIG_POLLY_CLANG
+KBUILD_CFLAGS += -mllvm -polly \
+		   -mllvm -polly-run-dce \
+		   -mllvm -polly-run-inliner \
+		   -mllvm -polly-opt-fusion=max \
+		   -mllvm -polly-ast-use-context \
+		   -mllvm -polly-vectorizer=stripmine \
+		   -mllvm -polly-invariant-load-hoisting
 endif
 
 # The arch Makefile can set ARCH_{CPP,A,C}FLAGS to override the default
